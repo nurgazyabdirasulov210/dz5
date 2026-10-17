@@ -22,6 +22,8 @@
   #overlay h1 { margin:0; font-size:clamp(1.6rem, 6vw, 2.6rem); letter-spacing:.12em; font-weight:800;
     background:linear-gradient(90deg,#ff3d6e,#ff9a3c,#e63cf0); -webkit-background-clip:text; background-clip:text; color:transparent; }
   #overlay .sub { margin:0; color:var(--muted); }
+  .ver { position:absolute; left:0; right:0; bottom:max(10px, env(safe-area-inset-bottom)); text-align:center;
+    font-size:.75rem; color:#6b7183; letter-spacing:.04em; }
   #msg { margin:0; color:var(--muted); min-height:1.4em; font-size:.9rem; }
   button { background:var(--accent); color:#fff; border:0; border-radius:12px; padding:14px 30px;
     font-size:1.05rem; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(255,61,110,.35); }
@@ -96,6 +98,7 @@
       </dl>
       <button id="start">Включить камеру</button>
       <p id="msg"></p>
+      <div class="ver">версия <span class="verNum"></span></div>
     </div>
   </div>
 
@@ -105,6 +108,8 @@ import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@m
 const $ = id => document.getElementById(id);
 const video = $("cam"), canvas = $("out"), ctx = canvas.getContext("2d", { willReadFrequently: true });
 const badge = $("badge"), statusEl = $("status"), overlay = $("overlay"), msg = $("msg"), startBtn = $("start");
+const VERSION = "v6 · 17.10.2026"; // увеличивай при каждом обновлении, чтобы на сайте было видно свежую версию
+document.querySelectorAll(".verNum").forEach(e => e.textContent = VERSION);
 const helpEl = $("help"), fnameEl = $("fname");
 let W = canvas.width, H = canvas.height;
 
@@ -537,7 +542,7 @@ async function start() {
 
     W = canvas.width = base.width = video.videoWidth || 640;
     H = canvas.height = base.height = video.videoHeight || 480;
-    helpEl.innerHTML = '<dl class="gestures">' + $("gestureList").innerHTML + "</dl>";
+    helpEl.innerHTML = '<dl class="gestures">' + $("gestureList").innerHTML + '</dl><div class="ver" style="position:static;margin-top:10px">версия ' + VERSION + "</div>";
     overlay.remove();
     badge.hidden = statusEl.hidden = false;
     setFilter(0);
