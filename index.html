@@ -47,10 +47,6 @@
     <video id="cam" playsinline muted></video>
     <div id="badge" class="pill" hidden></div>
     <div id="status" class="pill" hidden></div>
-    <div id="tools" hidden>
-      <button id="folderBtn" hidden>📁 Папка</button>
-      <button id="shotBtn">📸 Скриншот</button>
-    </div>
     <svg id="ring" viewBox="0 0 110 110"><circle id="ringArc" cx="55" cy="55" r="48" fill="none"
       stroke-dasharray="301.6" stroke-dashoffset="301.6"/><text x="55" y="57">📸</text></svg>
     <div id="flash"></div>
@@ -105,8 +101,44 @@ function heat(t) { // 0..1 -> синий → голубой → зелёный �
   return st[st.length - 1][1];
 }
 
+// Мультяшный стиль: сглаживание, постеризация, насыщенность и чёрные контуры (оператор Собеля)
+function cartoon(img, w, h, { levels, sat, edge, ink }) {
+  const d = img.data, n = w * h, L = new Float32Array(n), src = new Uint8ClampedArray(d);
+  // box-blur 3x3 дважды — убирает шум кожи и текстур
+  for (let pass = 0; pass < 3; pass++) {
+    const t = new Uint8ClampedArray(d);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) for (let c = 0; c < 3; c++) {
+      let s = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += t[((y + dy) * w + x + dx) * 4 + c];
+      d[(y * w + x) * 4 + c] = s / 9;
+    }
+  }
+  for (let i = 0; i < n; i++) L[i] = lum(d, i * 4);
+  for (let i = 0; i < n; i++) {
+    const j = i * 4, l = L[i] || 1;
+    // яркость делится на плоские полосы, оттенок остаётся прежним (кожа — кожей)
+    const band = Math.min(255, (Math.floor(l / 255 * levels) + 0.6) / levels * 255 * 1.08);
+    const k = band / l;
+    for (let c = 0; c < 3; c++) {
+      const v = l + (d[j + c] - l) * sat;              // насыщенность
+      d[j + c] = Math.max(0, Math.min(255, v * k));
+    }
+  }
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    const gx = -L[i - w - 1] - 2 * L[i - 1] - L[i + w - 1] + L[i - w + 1] + 2 * L[i + 1] + L[i + w + 1];
+    const gy = -L[i - w - 1] - 2 * L[i - w] - L[i - w + 1] + L[i + w - 1] + 2 * L[i + w] + L[i + w + 1];
+    if (Math.hypot(gx, gy) > edge) { const j = i * 4; d[j] = ink[0]; d[j + 1] = ink[1]; d[j + 2] = ink[2]; }
+  }
+  return img;
+}
+
 const FILTERS = [
   { name: "Сетка", draw(g, img, w, h, q) { g.putImageData(img, 0, 0); } , grid: true },
+  { name: "Аниме", draw(g, img, w, h) { g.putImageData(cartoon(img, w, h, { levels: 5, sat: 1.5, edge: 70, ink: [30, 20, 45] }), 0, 0); } },
+  { name: "Мультфильм", draw(g, img, w, h) { g.putImageData(cartoon(img, w, h, { levels: 4, sat: 1.8, edge: 55, ink: [0, 0, 0] }), 0, 0); } },
+  { name: "Манга", draw(g, img, w, h) {
+      const e = cartoon(img, w, h, { levels: 3, sat: 0, edge: 70, ink: [0, 0, 0] }); g.putImageData(e, 0, 0); } },
   { name: "Полутон", draw(g, img, w, h) { halftone(g, img, w, h, { cell: 6, bg: "#ffe3ea", dot: "#d1103f" }); } },
   { name: "Поп-арт", draw(g, img, w, h) {
       g.putImageData(mapPixels(img, (d, i) => {
@@ -323,7 +355,7 @@ async function start() {
     video.srcObject = stream; await video.play();
     W = canvas.width = video.videoWidth || 640; H = canvas.height = video.videoHeight || 480;
         overlay.hidden = true; overlay.style.display = "none";
-    badge.hidden = statusEl.hidden = $("tools").hidden = false; badge.textContent = "Фильтр: " + FILTERS[fi].name;
+    badge.hidden = statusEl.hidden = false; badge.textContent = "Фильтр: " + FILTERS[fi].name;
     loop();
   } catch (e) {
     console.error(e);
@@ -333,15 +365,6 @@ async function start() {
 }
 
 startBtn.addEventListener("click", start);
-$("shotBtn").addEventListener("click", e => { e.stopPropagation(); triggerShot(); });
-if (window.showDirectoryPicker) {
-  $("folderBtn").hidden = false;
-  $("folderBtn").addEventListener("click", async e => {
-    e.stopPropagation();
-    try { dirHandle = await window.showDirectoryPicker({ mode: "readwrite", startIn: "desktop" });
-      showToast("Скриншоты будут сохраняться в «" + dirHandle.name + "»"); } catch {}
-  });
-}
 canvas.addEventListener("click", nextFilter);
 addEventListener("keydown", e => { if (e.code === "Space" || e.code === "ArrowRight") { e.preventDefault(); nextFilter(); } });
 </script>
