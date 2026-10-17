@@ -7,44 +7,63 @@
 <style>
   :root { --bg:#0d0f14; --fg:#e8eaf0; --muted:#8b91a1; --accent:#ff3d6e; }
   * { box-sizing: border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+  html, body { margin:0; height:100%; background:#000; color:var(--fg); overflow:hidden;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:16px; }
-  h1 { margin:0; font-size:1.1rem; font-weight:600; letter-spacing:.04em; }
-  #stage { position:relative; width:min(100%, 760px); aspect-ratio:4/3; background:#000;
-    border-radius:10px; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.5); }
-  canvas { width:100%; height:100%; display:block; }
+  #stage { position:fixed; inset:0; background:#000; }
+  canvas { width:100%; height:100%; display:block; object-fit:cover; }
   video { display:none; }
   #overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
-    justify-content:center; gap:12px; background:rgba(13,15,20,.88); text-align:center; padding:24px; }
+    justify-content:center; gap:12px; background:rgba(13,15,20,.92); text-align:center; padding:24px; z-index:5; }
+  #overlay h1 { margin:0; font-size:1.3rem; letter-spacing:.08em; }
   #overlay p { margin:0; color:var(--muted); max-width:34em; line-height:1.5; }
   button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:12px 26px;
     font-size:1rem; font-weight:600; cursor:pointer; }
   button:disabled { opacity:.6; cursor:default; }
-  #badge { position:absolute; left:12px; bottom:12px; background:rgba(0,0,0,.6); padding:6px 12px;
-    border-radius:20px; font-size:.85rem; backdrop-filter:blur(4px); }
-  #status { position:absolute; right:12px; top:12px; background:rgba(0,0,0,.6); padding:6px 12px;
-    border-radius:20px; font-size:.8rem; color:var(--muted); }
-  .hint { color:var(--muted); font-size:.85rem; text-align:center; max-width:760px; line-height:1.5; }
-  kbd { background:#1c2030; border-radius:4px; padding:1px 6px; font-size:.8rem; }
+  .pill { position:absolute; background:rgba(0,0,0,.55); padding:6px 12px; border-radius:20px;
+    font-size:.85rem; backdrop-filter:blur(4px); }
+  #badge { left:12px; bottom:12px; }
+  #status { right:12px; top:12px; font-size:.8rem; color:#c5c9d6; }
+  #tools { position:absolute; right:12px; bottom:12px; display:flex; gap:8px; }
+  #tools button { background:rgba(0,0,0,.55); padding:8px 14px; font-size:.85rem; backdrop-filter:blur(4px); }
+  #flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:4; }
+  #flash.go { animation: flash .45s ease-out; }
+  @keyframes flash { 0% { opacity:.9 } 100% { opacity:0 } }
+  #ring { position:absolute; left:50%; top:50%; width:110px; height:110px; margin:-55px 0 0 -55px;
+    pointer-events:none; opacity:0; transition:opacity .15s; z-index:3; }
+  #ring.on { opacity:1; }
+  #ring circle { fill:rgba(0,0,0,.35); stroke:#fff; stroke-width:6; stroke-linecap:round;
+    transform:rotate(-90deg); transform-origin:50% 50%; }
+  #ring text { fill:#fff; font-size:34px; text-anchor:middle; dominant-baseline:central; }
+  #toast { position:absolute; left:50%; top:16px; transform:translate(-50%,-140%); background:rgba(20,24,34,.92);
+    padding:10px 16px; border-radius:12px; font-size:.9rem; z-index:6; display:flex; align-items:center; gap:12px;
+    transition:transform .3s; max-width:92vw; }
+  #toast.show { transform:translate(-50%,0); }
+  #toast img { height:44px; border-radius:6px; }
 </style>
 </head>
 <body>
-  <h1>HAND PORTAL</h1>
   <div id="stage">
     <canvas id="out" width="640" height="480"></canvas>
     <video id="cam" playsinline muted></video>
-    <div id="badge" hidden></div>
-    <div id="status" hidden></div>
+    <div id="badge" class="pill" hidden></div>
+    <div id="status" class="pill" hidden></div>
+    <div id="tools" hidden>
+      <button id="folderBtn" hidden>📁 Папка</button>
+      <button id="shotBtn">📸 Скриншот</button>
+    </div>
+    <svg id="ring" viewBox="0 0 110 110"><circle id="ringArc" cx="55" cy="55" r="48" fill="none"
+      stroke-dasharray="301.6" stroke-dashoffset="301.6"/><text x="55" y="57">📸</text></svg>
+    <div id="flash"></div>
+    <div id="toast"><img id="toastImg" alt=""><span id="toastTxt"></span></div>
     <div id="overlay">
-      <p>Сложи большие и указательные пальцы обеих рук «рамкой» — внутри появится портал с фильтром.
-         Раскрой обе ладони, чтобы переключить фильтр.</p>
+      <h1>HAND PORTAL</h1>
+      <p>Сложи большие и указательные пальцы обеих рук «рамкой» — внутри появится портал с фильтром.<br>
+         Раскрой обе ладони — смена фильтра.<br>
+         Покажи 2 или 3 пальца и подержи секунду — скриншот сохранится.</p>
       <button id="start">Включить камеру</button>
       <p id="msg"></p>
     </div>
   </div>
-  <div class="hint">Руки в рамку — портал · обе ладони раскрыты — следующий фильтр ·
-    <kbd>Пробел</kbd> или клик по картинке — переключить вручную</div>
 
 <script type="module">
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
@@ -156,6 +175,58 @@ function isOpenHand(lm) { // 4 пальца + большой разогнуты
   return fingers && thumb;
 }
 
+function extendedFingers(lm) { // число разогнутых пальцев без большого
+  const w = lm[0], tips = [8, 12, 16, 20], pips = [6, 10, 14, 18];
+  return tips.filter((t, k) => dist(lm[t], w) > dist(lm[pips[k]], w) * 1.15).length;
+}
+
+// ---------- Скриншот ----------
+let dirHandle = null, shotRequested = false, shotHold = 0, lastShot = 0;
+const flashEl = $("flash"), ring = $("ring"), ringArc = $("ringArc"), toast = $("toast");
+let toastTimer;
+
+function beep() {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)(), o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 1100; g.gain.setValueAtTime(.15, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .15);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + .16);
+  } catch {}
+}
+
+function showToast(text, url) {
+  $("toastTxt").textContent = text; $("toastImg").src = url || ""; $("toastImg").hidden = !url;
+  toast.classList.add("show"); clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 3500);
+}
+
+async function saveShot() { // вызывается сразу после отрисовки кадра
+  const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+  const d = new Date(), pad = n => String(n).padStart(2, "0");
+  const name = `hand-portal_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}.png`;
+  const url = URL.createObjectURL(blob);
+  let where = "в «Загрузки»";
+  try {
+    if (dirHandle) {
+      const fh = await dirHandle.getFileHandle(name, { create: true });
+      const wr = await fh.createWritable(); await wr.write(blob); await wr.close();
+      where = "в папку «" + dirHandle.name + "»";
+    } else throw 0;
+  } catch {
+    const a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  showToast("Скриншот сохранён " + where + ": " + name, url);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function triggerShot() {
+  if (performance.now() - lastShot < 1500) return;
+  lastShot = performance.now(); shotRequested = true;
+  flashEl.classList.remove("go"); void flashEl.offsetWidth; flashEl.classList.add("go");
+  beep();
+}
+
 // ---------- Отрисовка портала ----------
 const tmp = document.createElement("canvas"), tg = tmp.getContext("2d", { willReadFrequently: true });
 
@@ -225,6 +296,15 @@ function loop() {
     statusEl.textContent = hands.length ? "нужна вторая рука" : "покажи руки";
   }
 
+  // жест скриншота: 2 или 3 разогнутых пальца (кроме большого) на любой руке, держать ~0.7 с
+  const pose = hands.some(h => { const n = extendedFingers(h); return n === 2 || n === 3; });
+  if (pose && hands.length < 2) shotHold += (now - lastFrame) / 700; else shotHold = Math.max(0, shotHold - 0.1);
+  ring.classList.toggle("on", shotHold > 0.05 && !shotRequested);
+  ringArc.style.strokeDashoffset = 301.6 * (1 - Math.min(1, shotHold));
+  if (shotHold >= 1) { shotHold = 0; triggerShot(); }
+
+  if (shotRequested) { shotRequested = false; saveShot(); } // кадр без вспышки и подсказок
+
   const fps = Math.round(1000 / (now - lastFrame)); lastFrame = now;
   statusEl.textContent += " · " + fps + " fps";
 }
@@ -242,9 +322,8 @@ async function start() {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
     video.srcObject = stream; await video.play();
     W = canvas.width = video.videoWidth || 640; H = canvas.height = video.videoHeight || 480;
-    $("stage").style.aspectRatio = W + " / " + H;
-    overlay.hidden = true; overlay.style.display = "none";
-    badge.hidden = statusEl.hidden = false; badge.textContent = "Фильтр: " + FILTERS[fi].name;
+        overlay.hidden = true; overlay.style.display = "none";
+    badge.hidden = statusEl.hidden = $("tools").hidden = false; badge.textContent = "Фильтр: " + FILTERS[fi].name;
     loop();
   } catch (e) {
     console.error(e);
@@ -254,6 +333,15 @@ async function start() {
 }
 
 startBtn.addEventListener("click", start);
+$("shotBtn").addEventListener("click", e => { e.stopPropagation(); triggerShot(); });
+if (window.showDirectoryPicker) {
+  $("folderBtn").hidden = false;
+  $("folderBtn").addEventListener("click", async e => {
+    e.stopPropagation();
+    try { dirHandle = await window.showDirectoryPicker({ mode: "readwrite", startIn: "desktop" });
+      showToast("Скриншоты будут сохраняться в «" + dirHandle.name + "»"); } catch {}
+  });
+}
 canvas.addEventListener("click", nextFilter);
 addEventListener("keydown", e => { if (e.code === "Space" || e.code === "ArrowRight") { e.preventDefault(); nextFilter(); } });
 </script>
