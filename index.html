@@ -177,7 +177,7 @@ function isOpenHand(lm) { // 4 пальца + большой разогнуты
 
 function extendedFingers(lm) { // число разогнутых пальцев без большого
   const w = lm[0], tips = [8, 12, 16, 20], pips = [6, 10, 14, 18];
-  return tips.filter((t, k) => dist(lm[t], w) > dist(lm[pips[k]], w) * 1.15).length;
+  return tips.filter((t, k) => dist(lm[t], w) > dist(lm[pips[k]], w) * 1.08).length;
 }
 
 // ---------- Скриншот ----------
@@ -296,9 +296,9 @@ function loop() {
     statusEl.textContent = hands.length ? "нужна вторая рука" : "покажи руки";
   }
 
-  // жест скриншота: 2 или 3 разогнутых пальца (кроме большого) на любой руке, держать ~0.7 с
+  // жест скриншота: 2 или 3 разогнутых пальца (кроме большого) на любой руке или на обеих, держать ~0.5 с; расстояние между пальцами не важно
   const pose = hands.some(h => { const n = extendedFingers(h); return n === 2 || n === 3; });
-  if (pose && hands.length < 2) shotHold += (now - lastFrame) / 700; else shotHold = Math.max(0, shotHold - 0.1);
+  if (pose) shotHold += (now - lastFrame) / 500; else shotHold = Math.max(0, shotHold - 0.1);
   ring.classList.toggle("on", shotHold > 0.05 && !shotRequested);
   ringArc.style.strokeDashoffset = 301.6 * (1 - Math.min(1, shotHold));
   if (shotHold >= 1) { shotHold = 0; triggerShot(); }
