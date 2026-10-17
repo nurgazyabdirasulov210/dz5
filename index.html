@@ -55,7 +55,10 @@
       <h1>HAND PORTAL</h1>
       <p>Сложи большие и указательные пальцы обеих рук «рамкой» — внутри появится портал с фильтром.<br>
          Раскрой обе ладони — смена фильтра.<br>
-         Покажи 2 или 3 пальца и подержи секунду — скриншот сохранится.</p>
+         Покажи 2 или 3 пальца — скриншот.<br>
+         Обе руки с 4 пальцами (большой прижат) — портал закрепится на месте.<br>
+         Один указательный палец — фильтр на весь экран.<br>
+         Кулак — убрать закреплённое и фильтр на весь экран.</p>
       <button id="start">Включить камеру</button>
       <p id="msg"></p>
     </div>
@@ -163,6 +166,63 @@ const FILTERS = [
         d[i + 1] = Math.min(255, .349 * r + .686 * gr + .168 * b);
         d[i + 2] = Math.min(255, .272 * r + .534 * gr + .131 * b);
       }), 0, 0); } },
+  { name: "Неон-линии", draw(g, img, w, h) {
+      const d = img.data;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4, on = ((x + y) % 6) < lum(d, i) / 255 * 7;
+        d[i] = on ? 230 : 12; d[i + 1] = on ? 60 : 0; d[i + 2] = on ? 240 : 16;
+      }
+      g.putImageData(img, 0, 0); } },
+  { name: "Эхо", draw(g, img, w, h) { // цветные копии тёмных силуэтов, сдвинутые вправо
+      const d = img.data, src = new Uint8ClampedArray(d), n = w * h;
+      let mean = 0; for (let i = 0; i < n; i++) mean += lum(src, i * 4); mean /= n;
+      const thr = mean * 0.75, off = Math.round(w * 0.12);
+      const tints = [[255, 150, 50], [50, 220, 90], [110, 110, 255]];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (lum(d, i) < thr) continue;                     // оригинальный силуэт остаётся как есть
+        for (let k = 0; k < 3; k++) {
+          const sx = x - (k + 1) * off; if (sx < 0) break;
+          const j = (y * w + sx) * 4, l = lum(src, j);
+          if (l < thr) { const m = 0.4 + l / thr * 0.6; d[i] = tints[k][0] * m; d[i + 1] = tints[k][1] * m; d[i + 2] = tints[k][2] * m; break; }
+        }
+      }
+      g.putImageData(img, 0, 0); } },
+  { name: "Негатив", draw(g, img, w, h) {
+      g.putImageData(mapPixels(img, (d, i) => { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }), 0, 0); } },
+  { name: "Глитч", draw(g, img, w, h) {
+      const src = new Uint8ClampedArray(img.data), d = img.data;
+      for (let y = 0; y < h;) {
+        const bh = 3 + Math.random() * 18 | 0, sh = Math.random() < 0.3 ? (Math.random() - 0.5) * w * 0.25 | 0 : 0;
+        for (let yy = y; yy < Math.min(h, y + bh); yy++) for (let x = 0; x < w; x++) {
+          const i = (yy * w + x) * 4, xr = Math.min(w - 1, Math.max(0, x + sh - 4)), xb = Math.min(w - 1, Math.max(0, x + sh + 4));
+          d[i] = src[(yy * w + xr) * 4]; d[i + 1] = src[(yy * w + Math.min(w - 1, Math.max(0, x + sh))) * 4 + 1]; d[i + 2] = src[(yy * w + xb) * 4 + 2];
+        }
+        y += bh;
+      }
+      g.putImageData(img, 0, 0); } },
+  { name: "Пиксели", draw(g, img, w, h) {
+      const src = document.createElement("canvas"); src.width = w; src.height = h; src.getContext("2d").putImageData(img, 0, 0);
+      const k = 10, s = document.createElement("canvas"); s.width = Math.max(1, Math.ceil(w / k)); s.height = Math.max(1, Math.ceil(h / k));
+      s.getContext("2d").drawImage(src, 0, 0, s.width, s.height);
+      g.imageSmoothingEnabled = false; g.drawImage(s, 0, 0, s.width * k, s.height * k); } },
+  { name: "Ночное видение", draw(g, img, w, h) {
+      g.putImageData(mapPixels(img, (d, i) => {
+        const l = Math.min(255, lum(d, i) * 1.4 + (Math.random() - 0.5) * 30);
+        d[i] = l * 0.15; d[i + 1] = l; d[i + 2] = l * 0.2;
+      }), 0, 0); } },
+  { name: "Микс", draw(g, img, w, h) { // каждая плитка — свой фильтр
+      const src = document.createElement("canvas"); src.width = w; src.height = h;
+      const sc = src.getContext("2d", { willReadFrequently: true }); sc.putImageData(img, 0, 0);
+      const names = ["Аниме", "Тепловизор", "Поп-арт", "Неон-линии", "Аберрация", "Точки"], cols = 3, rows = 2;
+      const tw = Math.ceil(w / cols), th = Math.ceil(h / rows);
+      names.forEach((n, k) => {
+        const x = (k % cols) * tw, y = Math.floor(k / cols) * th, ww = Math.min(tw, w - x), hh = Math.min(th, h - y);
+        if (ww < 2 || hh < 2) return;
+        const t = document.createElement("canvas"); t.width = ww; t.height = hh;
+        FILTERS.find(f => f.name === n).draw(t.getContext("2d"), sc.getImageData(x, y, ww, hh), ww, hh);
+        g.drawImage(t, x, y);
+      }); } },
   { name: "Матовое стекло", draw(g, img, w, h) {
       const a = document.createElement("canvas"); a.width = Math.max(1, w >> 4); a.height = Math.max(1, h >> 4);
       const t = document.createElement("canvas"); t.width = w; t.height = h; t.getContext("2d").putImageData(img, 0, 0);
@@ -213,7 +273,7 @@ function extendedFingers(lm) { // число разогнутых пальцев
 }
 
 // ---------- Скриншот ----------
-let dirHandle = null, shotRequested = false, shotHold = 0, lastShot = 0;
+let dirHandle = null, shotRequested = false, lastShot = 0;
 const flashEl = $("flash"), ring = $("ring"), ringArc = $("ringArc"), toast = $("toast");
 let toastTimer;
 
@@ -259,25 +319,38 @@ function triggerShot() {
   beep();
 }
 
-// ---------- Отрисовка портала ----------
+// ---------- Отрисовка ----------
+const base = document.createElement("canvas"), bctx = base.getContext("2d", { willReadFrequently: true });
+const half = document.createElement("canvas"), hctx = half.getContext("2d", { willReadFrequently: true });
 const tmp = document.createElement("canvas"), tg = tmp.getContext("2d", { willReadFrequently: true });
 
-function renderPortal(q) {
+function filterRegion(f, x0, y0, w, h) { // применяет фильтр к куску чистого кадра, результат в tmp
+  const img = bctx.getImageData(x0, y0, w, h);
+  tmp.width = w; tmp.height = h; tg.imageSmoothingEnabled = true;
+  f.draw(tg, img, w, h);
+  return tmp;
+}
+
+function filterFull(f) { // весь экран считаем в половинном разрешении — так быстрее
+  const hw = W >> 1, hh = H >> 1;
+  half.width = hw; half.height = hh; hctx.drawImage(base, 0, 0, hw, hh);
+  const img = hctx.getImageData(0, 0, hw, hh);
+  tmp.width = hw; tmp.height = hh; tg.imageSmoothingEnabled = true;
+  f.draw(tg, img, hw, hh);
+  return tmp;
+}
+
+function drawPortal(q, f, showOriginal) {
   const xs = q.map(p => p.x), ys = q.map(p => p.y);
   const x0 = Math.max(0, Math.floor(Math.min(...xs))), y0 = Math.max(0, Math.floor(Math.min(...ys)));
   const x1 = Math.min(W, Math.ceil(Math.max(...xs))), y1 = Math.min(H, Math.ceil(Math.max(...ys)));
   const w = x1 - x0, h = y1 - y0;
   if (w < 8 || h < 8) return;
 
-  const f = FILTERS[fi];
-  const img = ctx.getImageData(x0, y0, w, h); // чистый кадр камеры (портал ещё не нарисован)
-  tmp.width = w; tmp.height = h;
-  f.draw(tg, img, w, h);
-
   ctx.save();
   pathQuad(ctx, q); ctx.clip();
-  ctx.drawImage(tmp, x0, y0);
-  if (f.grid) drawGrid(q);
+  if (showOriginal) ctx.drawImage(base, 0, 0);
+  else { ctx.drawImage(filterRegion(f, x0, y0, w, h), x0, y0); if (f.grid) drawGrid(q); }
   ctx.restore();
 
   ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineJoin = "round";
@@ -295,16 +368,47 @@ function drawGrid(q, n = 10) {
   ctx.stroke();
 }
 
+// ---------- Жесты ----------
+// 2–3 пальца — скриншот · 4 пальца обеими руками — закрепить портал ·
+// один указательный — фильтр на весь экран · кулак — убрать закреплённое и фильтр
+let frozen = [], fullscreen = false;
+const MAX_FROZEN = 6;
+const GEST = { shot: { icon: "📸", ms: 500 }, freeze: { icon: "📌", ms: 600 }, full: { icon: "🌈", ms: 700 }, clear: { icon: "✊", ms: 700 } };
+const thumbOut = lm => dist(lm[4], lm[17]) > dist(lm[3], lm[17]) * 1.1;
+let gest = null, gHold = 0, gFired = false;
+
+function detectGesture(hands) {
+  if (!hands.length) return null;
+  const ns = hands.map(extendedFingers);
+  if (hands.length === 2 && quad && ns.every(n => n === 4) && !hands.some(thumbOut)) return "freeze";
+  if (ns.some(n => n === 2 || n === 3)) return "shot";
+  if ((frozen.length || fullscreen) && hands.some((h, k) => ns[k] === 0 && !thumbOut(h))) return "clear";
+  if (!fullscreen && hands.length === 1 && ns[0] === 1) return "full";
+  return null;
+}
+
+function fireGesture(g) {
+  if (g === "shot") triggerShot();
+  else if (g === "freeze") {
+    if (frozen.length >= MAX_FROZEN) frozen.shift();
+    frozen.push({ q: quad.map(p => ({ ...p })), f: FILTERS[fi] });
+    showToast("Портал закреплён (" + frozen.length + ")");
+  } else if (g === "full") { fullscreen = true; showToast("Фильтр на весь экран: " + FILTERS[fi].name); }
+  else if (g === "clear") { frozen = []; fullscreen = false; showToast("Всё убрано"); }
+}
+
 // ---------- Основной цикл ----------
-let landmarker, lastTs = -1, lastSwitch = 0, openSince = 0, wasOpen = false, lastFrame = performance.now();
+let landmarker, lastTs = -1, lastSwitch = 0, openSince = 0, lastFrame = performance.now();
 
 function loop() {
   requestAnimationFrame(loop);
   if (video.readyState < 2) return;
 
-  ctx.save(); ctx.scale(-1, 1); ctx.drawImage(video, -W, 0, W, H); ctx.restore(); // зеркало
+  bctx.save(); bctx.scale(-1, 1); bctx.drawImage(video, -W, 0, W, H); bctx.restore(); // зеркало
+  if (fullscreen) { ctx.imageSmoothingEnabled = true; ctx.drawImage(filterFull(FILTERS[fi]), 0, 0, W, H); }
+  else ctx.drawImage(base, 0, 0);
 
-  const now = performance.now();
+  const now = performance.now(), dt = now - lastFrame;
   let res = null;
   if (video.currentTime !== lastTs) {
     lastTs = video.currentTime;
@@ -314,31 +418,40 @@ function loop() {
   const hands = (loop.res?.landmarks || []).map(lm =>
     lm.map(p => ({ x: (1 - p.x) * W, y: p.y * H })));
 
+  frozen.forEach(z => drawPortal(z.q, z.f, false)); // закреплённые порталы всегда со своим фильтром
+
   if (hands.length === 2) {
     hands.sort((a, b) => a[0].x - b[0].x);
     smoothQuad(orderQuad([hands[0][4], hands[0][8]], [hands[1][4], hands[1][8]]));
-    renderPortal(quad);
+    drawPortal(quad, FILTERS[fi], fullscreen); // при фильтре на весь экран портал показывает оригинал
 
-    const open = hands.every(isOpenHand);
-    if (open && !wasOpen && now - lastSwitch > 900) { nextFilter(); lastSwitch = now; }
-    wasOpen = open;
+    // обе ладони раскрыты (удержать 0.25 с) — следующий фильтр
+    if (hands.every(isOpenHand)) {
+      if (!openSince) openSince = now;
+      if (now - openSince > 250 && now - lastSwitch > 900) { nextFilter(); lastSwitch = now; openSince = Infinity; }
+    } else openSince = 0;
     statusEl.textContent = "руки: 2";
   } else {
-    quad = null; wasOpen = false;
+    quad = null; openSince = 0;
     statusEl.textContent = hands.length ? "нужна вторая рука" : "покажи руки";
   }
 
-  // жест скриншота: 2 или 3 разогнутых пальца (кроме большого) на любой руке или на обеих, держать ~0.5 с; расстояние между пальцами не важно
-  const pose = hands.some(h => { const n = extendedFingers(h); return n === 2 || n === 3; });
-  if (pose) shotHold += (now - lastFrame) / 500; else shotHold = Math.max(0, shotHold - 0.1);
-  ring.classList.toggle("on", shotHold > 0.05 && !shotRequested);
-  ringArc.style.strokeDashoffset = 301.6 * (1 - Math.min(1, shotHold));
-  if (shotHold >= 1) { shotHold = 0; triggerShot(); }
+  // удержание жеста ~0.5–0.7 с, кольцо показывает прогресс; повтор — только после смены жеста
+  const g = detectGesture(hands);
+  if (g !== gest) { gest = g; gHold = 0; gFired = false; }
+  else if (g && !gFired) gHold += dt / GEST[g].ms;
+  const showRing = !!g && !gFired && gHold > 0.05;
+  ring.classList.toggle("on", showRing);
+  if (showRing) {
+    ring.querySelector("text").textContent = GEST[g].icon;
+    ringArc.style.strokeDashoffset = 301.6 * (1 - Math.min(1, gHold));
+  }
+  if (g && !gFired && gHold >= 1) { gFired = true; fireGesture(g); }
 
   if (shotRequested) { shotRequested = false; saveShot(); } // кадр без вспышки и подсказок
 
-  const fps = Math.round(1000 / (now - lastFrame)); lastFrame = now;
-  statusEl.textContent += " · " + fps + " fps";
+  const fps = Math.round(1000 / dt); lastFrame = now;
+  statusEl.textContent += (fullscreen ? " · экран" : "") + (frozen.length ? " · закреплено: " + frozen.length : "") + " · " + fps + " fps";
 }
 
 // ---------- Запуск ----------
@@ -353,7 +466,7 @@ async function start() {
     msg.textContent = "Запрашиваю камеру…";
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
     video.srcObject = stream; await video.play();
-    W = canvas.width = video.videoWidth || 640; H = canvas.height = video.videoHeight || 480;
+    W = canvas.width = base.width = video.videoWidth || 640; H = canvas.height = base.height = video.videoHeight || 480;
         overlay.hidden = true; overlay.style.display = "none";
     badge.hidden = statusEl.hidden = false; badge.textContent = "Фильтр: " + FILTERS[fi].name;
     loop();
